@@ -1,0 +1,66 @@
+__pycache__/run.cpython-39.pyc
+app/__pycache__/__init__.cpython-39.pyc
+__pycache__/start.cpython-39.pyc
+__pycache__/run.cpython-38.pyc
+app/__pycache__/__init__.cpython-38.pyc
+app/__pycache__/routes.cpython-38.pyc
+app/__pycache__/routes.cpython-38.pyc
+app/__pycache__/routes.cpython-38.pyc
+__pycache__/*.pyc
+__pycache__
+app/__pycache__/
+
+# Taken from microblog tutorial
+*.py[cod]
+
+# C extensions
+*.so
+
+# Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+bin
+var
+sdist
+develop-eggs
+.installed.cfg
+lib
+lib64
+__pycache__
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.coverage
+.tox
+nosetests.xml
+
+# Translations
+*.mo
+
+# Mr Developer
+.mr.developer.cfg
+.project
+.pydevproject
+
+venv
+app.db
+microblog.log*
+
+*.jpg
+*.jpeg
+*.png
+
+migrations
+__pycache__
+app/__pycache__/forms.cpython-38.pyc
+app/__pycache__/routes.cpython-38.pyc
+app/__pycache__/forms.cpython-38.pyc
+app/access.py
+access.py
+.vscode
