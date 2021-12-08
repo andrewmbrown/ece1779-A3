@@ -1,8 +1,12 @@
 import os
 import time
+import shutil
+import requests
 from flask import Flask, flash, redirect, url_for, render_template, session
 from config import Config
-from app.forms import LoginForm, RegistrationForm, PictureForm
+from app.forms import LoginForm, RegistrationForm, PictureForm, URLPictureForm
+from app.imagetransform import image_transform
+from app.apputilities import extension_dict, check_img_url
 from werkzeug.utils import secure_filename
 from app.aws import AwsSession 
 
@@ -105,15 +109,30 @@ def upload():
         return redirect(url_for('index'))
     
     form = PictureForm()
-    """ TODO: LEFT HERE, MAKE THIS PATHING FOR S3 SAVE PROPERLY
     if form.validate_on_submit():
         if form.picture.data:
             filename = secure_filename(form.picture.data.filename)
             filename_without_extension = (filename.split('.'))[0]
             img_folder_name = str(filename_without_extension+str(int(time.time())))
             username = str(session['current_user'])
+            cwd = os.getcwd()
+            user_image_path = os.path.join(cwd, 'app', 'static', 'images', username) # USER GALLERY FOLDER
+            if not os.path.exists(user_image_path):
+                os.makedirs(user_image_path)
+
+            picture_path = os.path.join(cwd, 'app', 'static', 'images', username, img_folder_name) # FOLDER for SINGLE IMAGE
+            http_path = bucket_url_base + "static/images/" + username + "/" + img_folder_name + "/"
             s3_path = "/".join(['static','images', username, img_folder_name])
-            
+
+            path_dict = {
+                'rootdir': picture_path,
+                'normal': os.path.join(picture_path, 'normal'),
+                'thumbnail': os.path.join(picture_path, 'thumbnail'),
+                'blur': os.path.join(picture_path, 'blur'),
+                'shade': os.path.join(picture_path, 'shade'),
+                'spread': os.path.join(picture_path, 'spread')
+            }
+
             s3_dict = {
             'rootdir': s3_path,
             'normal': "/".join([s3_path, 'normal']),
@@ -123,14 +142,234 @@ def upload():
             'spread': "/".join([s3_path, 'spread'])
             }
 
+            pic_path = {
+                "username": username,
+                "filename_currtime": img_folder_name, #img_folder_name 
+                "filename": filename,
+                "location": picture_path,
+                "httppath": http_path,
+                "s3path": s3_path
+            }
+
+            # save the image file itself on the local machine
+            os.mkdir(picture_path)
+            os.mkdir(path_dict['normal'])
+            os.mkdir(path_dict['thumbnail'])
+            os.mkdir(path_dict['blur'])
+            os.mkdir(path_dict['shade'])
+            os.mkdir(path_dict['spread'])
+
+            main_path = os.path.join(path_dict['normal'], filename)
+            thumbnail_path = os.path.join(path_dict['thumbnail'], filename)
+            blur_path = os.path.join(path_dict['blur'], filename)
+            shade_path = os.path.join(path_dict['shade'], filename)
+            spread_path = os.path.join(path_dict['spread'], filename)
+
+            main_path_s3 = "/".join([s3_dict['normal'], filename])
+            thumbnail_path_s3 = "/".join([s3_dict['thumbnail'], filename])
+            blur_path_s3 = "/".join([s3_dict['blur'], filename])
+            shade_path_s3 = "/".join([s3_dict['shade'], filename])
+            spread_path_s3 = "/".join([s3_dict['spread'], filename])
             main_path = os.path.join(path_dict['normal'], filename)
             main_path_s3 = "/".join([s3_dict['normal'], filename])
 
+            form.picture.data.save(main_path)
+            blur_test = image_transform(main_path, blur_path, 0) # add errors if didn't work
+            shade_test = image_transform(main_path, shade_path, 1)
+            spread_test = image_transform(main_path, spread_path, 2)
+            thumbnail_test = image_transform(main_path, thumbnail_path, 3)
+
+            s3_client.upload_file(main_path, bucket, main_path_s3)
+            s3_client.upload_file(blur_path, bucket, blur_path_s3)
+            s3_client.upload_file(shade_path, bucket, shade_path_s3)
+            s3_client.upload_file(spread_path, bucket, spread_path_s3)
+            s3_client.upload_file(thumbnail_path, bucket, thumbnail_path_s3)
             s3_client.upload_file(main_path, bucket, main_path_s3)
 
+
+            shutil.rmtree(user_image_path)
+
             aws.DDB_upload_image(pic_path)
-    """
     return render_template('upload.html', title='Upload Image', form=form)
+
+
+@app.route('/uploadurl', methods=['GET', 'POST'])
+def uploadurl():
+    if session['logged_in'] == False:  # cant upload if not logged in
+        flash('Please login to upload images', category='danger')
+        return redirect(url_for('index'))
+
+    form = URLPictureForm()
+    if form.validate_on_submit():
+        if form.urlpicture.data:
+            # Uploading images depends on the machine
+
+            # check file size from URL by checking the header using request library
+            # header settings give full uncompressed fizesize
+            try:
+                r = requests.head(str(form.urlpicture.data),headers={'Accept-Encoding': 'identity'})
+                size = int(r.headers['content-length'])
+            except:
+                flash('Image URL was improperly entered or not a viable image URL, please try another upload', category='danger')
+                return redirect(url_for('uploadurl'))
+            if size > 10000000:  # larger than 10MB, server side check
+                flash("File is too large! Please only upload images below 10MB in filesize")
+                return redirect(url_for('uploadurl'))
+
+            viable_img = check_img_url(str(form.urlpicture.data))
+            viable_img_truth = viable_img[0]
+            if not viable_img_truth:
+                flash('Image URL was improperly entered or not a viable image URL, please try another upload', category='danger')
+                return redirect(url_for('uploadurl'))
+
+            processed_filename = secure_filename(str(form.urlpicture.data)).replace(".", "_").lower()
+            filename_ext = extension_dict[viable_img[1]] # png, jpg, or jpeg 
+            filename_without_extension = str(processed_filename[-32:]) # just use the last 256 chars of it 
+            filename = filename_without_extension + str(filename_ext)
+
+            try: 
+                img_data = requests.get(str(form.urlpicture.data)).content
+                with open(filename, 'wb') as handler:
+                    handler.write(img_data)
+            except:
+                flash("Error in downloading image from URL. Please try another.", category='danger')
+                return redirect(url_for('uploadurl'))
+            
+
+            img_folder_name = str(filename_without_extension+str(int(time.time())))
+            username = str(session['current_user'])
+            cwd = os.getcwd()
+            user_image_path = os.path.join(cwd, 'app', 'static', 'images', username)
+            if not os.path.exists(user_image_path):
+                os.makedirs(user_image_path)
+            picture_path = os.path.join(cwd, 'app', 'static', 'images', username, img_folder_name)
+            html_path = os.path.join('static', 'images', username, img_folder_name)
+            html_path_old = os.path.join('static', 'images', username, img_folder_name)
+            http_path = bucket_url_base + "static/images/" + username + "/" + img_folder_name + "/"
+            s3_path = "/".join(['static','images', username, img_folder_name])
+
+            path_dict = {
+                'rootdir': picture_path,
+                'normal': os.path.join(picture_path, 'normal'),
+                'thumbnail': os.path.join(picture_path, 'thumbnail'),
+                'blur': os.path.join(picture_path, 'blur'),
+                'shade': os.path.join(picture_path, 'shade'),
+                'spread': os.path.join(picture_path, 'spread')
+            }
+
+            s3_dict = {
+                'rootdir': s3_path,
+                'normal': "/".join([s3_path, 'normal']),
+                'thumbnail': "/".join([s3_path, 'thumbnail']),
+                'blur': "/".join([s3_path, 'blur']),
+                'shade': "/".join([s3_path, 'shade']),
+                'spread': "/".join([s3_path, 'spread'])
+            }
+        
+            # pic_path = ImageLocation(location=picture_path, httppath=html_path, s3path=s3_path, filename=filename, user_id=current_user.id)
+            # pic_path = ImageLocation(location=picture_path, httppath=http_path, s3path=s3_path, filename=filename, user_id=current_user.id)
+
+            pic_path = {
+                "username": username,
+                "filename_currtime": img_folder_name, #img_folder_name 
+                "filename": filename,
+                "location": picture_path,
+                "httppath": http_path,
+                "s3path": s3_path
+            }
+
+            # save the image file itself on the local machine
+            os.mkdir(picture_path)
+            os.mkdir(path_dict['normal'])
+            os.mkdir(path_dict['thumbnail'])
+            os.mkdir(path_dict['blur'])
+            os.mkdir(path_dict['shade'])
+            os.mkdir(path_dict['spread'])
+
+            # form.picture.data.save(main_path)
+            shutil.copy(filename, path_dict['normal'])
+
+            main_path = os.path.join(path_dict['normal'], filename)
+            thumbnail_path = os.path.join(path_dict['thumbnail'], filename)
+            blur_path = os.path.join(path_dict['blur'], filename)
+            shade_path = os.path.join(path_dict['shade'], filename)
+            spread_path = os.path.join(path_dict['spread'], filename)
+
+            main_path_s3 = "/".join([s3_dict['normal'], filename])
+            thumbnail_path_s3 = "/".join([s3_dict['thumbnail'], filename])
+            blur_path_s3 = "/".join([s3_dict['blur'], filename])
+            shade_path_s3 = "/".join([s3_dict['shade'], filename])
+            spread_path_s3 = "/".join([s3_dict['spread'], filename])
+
+            blur_test = image_transform(main_path, blur_path, 0) # add errors if didn't work
+            shade_test = image_transform(main_path, shade_path, 1)
+            spread_test = image_transform(main_path, spread_path, 2)
+            thumbnail_test = image_transform(main_path, thumbnail_path, 3)
+
+            if blur_test == -1 or shade_test == -1 or spread_test == -1 or thumbnail_test == -1:
+                flash('Image could not be transformed! Please try again or another', category='danger')
+                return redirect(url_for('uploadurl'))
+
+            s3_client.upload_file(main_path, bucket, main_path_s3)
+            s3_client.upload_file(blur_path, bucket, blur_path_s3)
+            s3_client.upload_file(shade_path, bucket, shade_path_s3)
+            s3_client.upload_file(spread_path, bucket, spread_path_s3)
+            s3_client.upload_file(thumbnail_path, bucket, thumbnail_path_s3)
+
+            # add picture path to the database
+            '''
+            db.session.add(pic_path)
+            db.session.commit()
+            '''
+            aws.DDB_upload_image(pic_path)
+
+            # remove the temp file
+            os.remove(filename)
+            shutil.rmtree(user_image_path)
+
+            flash('Upload successful.')
+    return render_template('uploadurl.html', title='Upload Image via URL', form=form)
+
+
+# gallery will go here 
+@app.route('/gallery', methods=['GET'])
+def gallery():
+    if session['logged_in'] == False:  # cant upload if not logged in
+        flash('Please login to upload images', category='danger')
+        return redirect(url_for('index'))
+    title = "{}'s Image Gallery".format(str(session['current_user']))
+    # image_path_rows = ImageLocation.query.filter_by(user_id=current_user.id).all()
+    image_path_rows = aws.DDB_get_images_by_user(str(session['current_user']))
+
+    image_paths = [{
+        'filename': str(img['filename']),
+        'filename_url': str(str(img['filename']).replace(".", "$")),
+        'dirname': str(os.path.basename(os.path.normpath(str(img['s3path'])))),
+        'root': str(img['s3path']),
+        'thumbnail': str(str(img['httppath']) + "thumbnail/" + str(img['filename']))
+    } for img in image_path_rows]
+    return render_template('gallery.html', title=title, image_paths=image_paths)
+
+
+@app.route('/image/<imagefolder>/<imgname>', methods=['GET'])
+def image(imagefolder, imgname):
+    if session['logged_in'] == False:  # cant upload if not logged in
+        flash('Please login to upload images', category='danger')
+        return redirect(url_for('index'))
+    username = str(session['current_user'])
+    filename = str(imgname).replace("$", ".")
+    path_components = {
+        'username': username,
+        'dirname': imagefolder,
+        'filename': filename,
+        'normal': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/normal/"+filename,
+        'blur': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/blur/"+filename,
+        'shade': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/shade/"+filename,
+        'spread': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/spread/"+filename
+    }
+    # print(path_components)
+    return render_template('image.html', title=imagefolder, pathcomp=path_components)
+
 
 @app.route('/api')
 def api():

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+    <h1>{{ title }}</h1>
+    <p>Click on Gallery at the top to return to your gallery.</p>
+    <div><img src="{{ pathcomp.normal }}"></div>
+    <div><img src="{{ pathcomp.blur }}"></div>
+    <div><img src="{{ pathcomp.shade }}"></div>
+    <div><img src="{{ pathcomp.spread }}"></div>
+{% endblock content %}
