@@ -381,6 +381,19 @@ def image(imagefolder, imgname):
     return render_template('image.html', title=imagefolder, pathcomp=path_components)
 
 
+# Various error handling functions, each serving an individual purpose
+# handle error if file is too large, redirect to uplod
+@app.errorhandler(413)
+def too_large(e):
+    flash("File is too large! Please only upload images below 10MB in filesize")
+    return redirect(url_for('upload'))
+
+# handle if file not found error, 404
+@app.errorhandler(404)
+def not_found_error(e):
+    return render_template('404.html'), 404
+
+
 @app.route('/api')
 def api():
     return {'hello' : 'world'}
