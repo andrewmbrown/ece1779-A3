@@ -19,6 +19,7 @@ bucket_url_base = aws.bucket_url_base
 s3_client = aws.s3
 # login = LoginManager(app)
 # login.login_view = 'login'
+# Zappa build
 
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/index', methods=['GET', 'POST'])
