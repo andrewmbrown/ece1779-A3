@@ -116,12 +116,12 @@ def upload():
             filename_without_extension = (filename.split('.'))[0]
             img_folder_name = str(filename_without_extension+str(int(time.time())))
             username = str(session['current_user'])
-            cwd = os.getcwd()
-            user_image_path = os.path.join(cwd, 'app', 'static', 'images', username) # USER GALLERY FOLDER
-            if not os.path.exists(user_image_path):
-                os.makedirs(user_image_path)
+            root_dir = str(os.path.abspath(os.sep))
+            user_image_path = os.path.join(root_dir, 'tmp') # Zappa/Lambda only has write permissions to this dir
+            # if not os.path.exists(user_image_path):
+            #     os.makedirs(user_image_path)
 
-            picture_path = os.path.join(cwd, 'app', 'static', 'images', username, img_folder_name) # FOLDER for SINGLE IMAGE
+            picture_path = user_image_path # FOLDER for ALL IMAGES
             http_path = bucket_url_base + "static/images/" + username + "/" + img_folder_name + "/"
             s3_path = "/".join(['static','images', username, img_folder_name])
 
@@ -153,7 +153,7 @@ def upload():
             }
 
             # save the image file itself on the local machine
-            os.mkdir(picture_path)
+            # os.mkdir(picture_path) # already exists
             os.mkdir(path_dict['normal'])
             os.mkdir(path_dict['thumbnail'])
             os.mkdir(path_dict['blur'])
@@ -187,8 +187,13 @@ def upload():
             s3_client.upload_file(thumbnail_path, bucket, thumbnail_path_s3)
             s3_client.upload_file(main_path, bucket, main_path_s3)
 
-
-            shutil.rmtree(user_image_path)
+            # remove files in lambda function tmp folder
+            for file_object in os.listdir(picture_path):
+                file_object_path = os.path.join(picture_path, file_object)
+                if os.path.isfile(file_object_path) or os.path.islink(file_object_path):
+                    os.unlink(file_object_path)
+                else:
+                    shutil.rmtree(file_object_path)
 
             aws.DDB_upload_image(pic_path)
     return render_template('upload.html', title='Upload Image', form=form)
@@ -239,11 +244,9 @@ def uploadurl():
 
             img_folder_name = str(filename_without_extension+str(int(time.time())))
             username = str(session['current_user'])
-            cwd = os.getcwd()
-            user_image_path = os.path.join(cwd, 'app', 'static', 'images', username)
-            if not os.path.exists(user_image_path):
-                os.makedirs(user_image_path)
-            picture_path = os.path.join(cwd, 'app', 'static', 'images', username, img_folder_name)
+            root_dir = str(os.path.abspath(os.sep))
+            user_image_path = os.path.join(root_dir, 'tmp') # Zappa/Lambda only has write permissions to this dir
+            picture_path = user_image_path
             html_path = os.path.join('static', 'images', username, img_folder_name)
             html_path_old = os.path.join('static', 'images', username, img_folder_name)
             http_path = bucket_url_base + "static/images/" + username + "/" + img_folder_name + "/"
@@ -280,7 +283,7 @@ def uploadurl():
             }
 
             # save the image file itself on the local machine
-            os.mkdir(picture_path)
+            # os.mkdir(picture_path)
             os.mkdir(path_dict['normal'])
             os.mkdir(path_dict['thumbnail'])
             os.mkdir(path_dict['blur'])
@@ -326,7 +329,13 @@ def uploadurl():
 
             # remove the temp file
             os.remove(filename)
-            shutil.rmtree(user_image_path)
+            # remove files in lambda function tmp folder
+            for file_object in os.listdir(picture_path):
+                file_object_path = os.path.join(picture_path, file_object)
+                if os.path.isfile(file_object_path) or os.path.islink(file_object_path):
+                    os.unlink(file_object_path)
+                else:
+                    shutil.rmtree(file_object_path)
 
             flash('Upload successful.')
     return render_template('uploadurl.html', title='Upload Image via URL', form=form)
