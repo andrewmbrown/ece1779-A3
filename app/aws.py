@@ -13,8 +13,8 @@ class AwsSession:
         self.AWS_ACC_KEY = access_keys['AWS_ACC_KEY']
         self.AWS_SEC_KEY = access_keys['AWS_SECRET_KEY']
 
-        self.user_table_name = 'user-test'
-        self.image_table_name = 'image-location-test'
+        self.user_table_name = 'user-table-01'
+        self.image_table_name = 'image-location-table-01'
 
         session = boto3.Session(
                 aws_access_key_id=self.AWS_ACC_KEY,
@@ -29,8 +29,8 @@ class AwsSession:
         self.user_table = self.ddb.Table(self.user_table_name)
         self.image_table = self.ddb.Table(self.image_table_name)
 
-        self.bucket = 'ece1779a3g81'
-        self.bucket_url_base = 'https://ece1779a3g81.s3.amazonaws.com/'
+        self.bucket = 'ece1779a3g82'
+        self.bucket_url_base = 'https://ece1779a3g82.s3.amazonaws.com/'
 
     def DDB_get_user(self, username):
 

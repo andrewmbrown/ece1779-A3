@@ -130,19 +130,13 @@ def upload():
             path_dict = {
                 'rootdir': picture_path,
                 'normal': os.path.join(picture_path, 'normal'),
-                'thumbnail': os.path.join(picture_path, 'thumbnail'),
-                'blur': os.path.join(picture_path, 'blur'),
-                'shade': os.path.join(picture_path, 'shade'),
-                'spread': os.path.join(picture_path, 'spread')
+                'thumbnail': os.path.join(picture_path, 'thumbnail')
             }
 
             s3_dict = {
             'rootdir': s3_path,
             'normal': "/".join([s3_path, 'normal']),
-            'thumbnail': "/".join([s3_path, 'thumbnail']),
-            'blur': "/".join([s3_path, 'blur']),
-            'shade': "/".join([s3_path, 'shade']),
-            'spread': "/".join([s3_path, 'spread'])
+            'thumbnail': "/".join([s3_path, 'thumbnail'])
             }
 
             pic_path = {
@@ -151,43 +145,30 @@ def upload():
                 "filename": filename,
                 "location": picture_path,
                 "httppath": http_path,
-                "s3path": s3_path
+                "s3path": s3_path,
+                "text_english": "",
+                "text_french": "",
+                "text_spanish": ""
             }
 
             # save the image file itself on the local machine
             # os.mkdir(picture_path) # already exists
             os.mkdir(path_dict['normal'])
             os.mkdir(path_dict['thumbnail'])
-            os.mkdir(path_dict['blur'])
-            os.mkdir(path_dict['shade'])
-            os.mkdir(path_dict['spread'])
 
             main_path = os.path.join(path_dict['normal'], filename)
             thumbnail_path = os.path.join(path_dict['thumbnail'], filename)
-            blur_path = os.path.join(path_dict['blur'], filename)
-            shade_path = os.path.join(path_dict['shade'], filename)
-            spread_path = os.path.join(path_dict['spread'], filename)
 
             main_path_s3 = "/".join([s3_dict['normal'], filename])
             thumbnail_path_s3 = "/".join([s3_dict['thumbnail'], filename])
-            blur_path_s3 = "/".join([s3_dict['blur'], filename])
-            shade_path_s3 = "/".join([s3_dict['shade'], filename])
-            spread_path_s3 = "/".join([s3_dict['spread'], filename])
-            main_path = os.path.join(path_dict['normal'], filename)
-            main_path_s3 = "/".join([s3_dict['normal'], filename])
 
             form.picture.data.save(main_path)
-            blur_test = image_transform(main_path, blur_path, 0) # add errors if didn't work
-            shade_test = image_transform(main_path, shade_path, 1)
-            spread_test = image_transform(main_path, spread_path, 2)
             thumbnail_test = image_transform(main_path, thumbnail_path, 3)
 
-            s3_client.upload_file(main_path, bucket, main_path_s3)
-            s3_client.upload_file(blur_path, bucket, blur_path_s3)
-            s3_client.upload_file(shade_path, bucket, shade_path_s3)
-            s3_client.upload_file(spread_path, bucket, spread_path_s3)
             s3_client.upload_file(thumbnail_path, bucket, thumbnail_path_s3)
             s3_client.upload_file(main_path, bucket, main_path_s3)
+
+            # TODO: DO THE LAMBDA CALL FOR IMAGE TEXT DETECTION AND TRANSLATION HERE
 
             # remove files in lambda function tmp folder
             for file_object in os.listdir(picture_path):
@@ -198,6 +179,7 @@ def upload():
                     shutil.rmtree(file_object_path)
 
             aws.DDB_upload_image(pic_path)
+
     return render_template('upload.html', title='Upload Image', form=form)
 
 
