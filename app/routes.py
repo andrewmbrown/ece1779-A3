@@ -21,7 +21,7 @@ s3_client = aws.s3
 # login.login_view = 'login'
 # Zappa build
 
-# comment test for merge
+# comment test for merge of branch
 
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/index', methods=['GET', 'POST'])
