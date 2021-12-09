@@ -2,13 +2,23 @@ import os
 import time
 import shutil
 import requests
+import psutil
+import time
+import json
+import boto3
+import ast
+import math
 from flask import Flask, flash, redirect, url_for, render_template, session
 from config import Config
 from app.forms import LoginForm, RegistrationForm, PictureForm, URLPictureForm
 from app.imagetransform import image_transform
 from app.apputilities import extension_dict, check_img_url
 from werkzeug.utils import secure_filename
-from app.aws import AwsSession 
+from app.aws import AwsSession
+from datetime import datetime
+from access import access_keys
+from apscheduler.schedulers.background import BackgroundScheduler  # for posting http req data
+
 
 app = Flask(__name__)  # create app of instance Flask
 app.config['SECRET_KEY'] = 'c7e22c3ba14bd20390e19e9954796d8b'
@@ -17,6 +27,57 @@ aws = AwsSession()
 bucket = aws.bucket 
 bucket_url_base = aws.bucket_url_base
 s3_client = aws.s3
+
+lambda_client = boto3.client('lambda',
+        # aws_access_key_id = access_keys['AWS_ACC_KEY'],
+        # aws_secret_access_key = access_keys['AWS_SECRET_KEY'],
+        aws_access_key_id = access_keys['AWS_ACC_KEY_LAMBDA'],
+        aws_secret_access_key = access_keys['AWS_SECRET_KEY_LAMBDA'],			
+        region_name = 'us-east-1')
+
+
+#convert mins to datetime obj - not working as expected 
+def convert_unix_to_utc(unix_in_min):
+	ts = int(unix_in_min * 60)
+	return datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def monitor_stats():
+    time_stamp = math.floor(time.time() / 60)
+    data = {}
+    cpu_util = psutil.cpu_percent(interval=None)
+    mem_util = psutil.virtual_memory()
+    mem_util = mem_util.percent
+    disk_util = psutil.disk_usage('/')
+    disk_util = disk_util.percent
+    data['timestamp'] = time_stamp
+    data['cpu_util'] = cpu_util
+    data['mem_util'] = mem_util
+    data['disk_util'] = disk_util
+    data['time_date'] = convert_unix_to_utc(time_stamp)
+    json_data = json.dumps(data, sort_keys=True, default=str)
+    print(json_data)
+
+    # invoke lambda
+    response = lambda_client.invoke(FunctionName='arn:aws:lambda:us-east-1:962907337984:function:DataAnalytics', InvocationType='RequestResponse', Payload=json_data)
+    # Parse return
+    response_string = response['Payload'].read()  # decode to bytes
+    response_decoded = response_string.decode()  # bytes to string
+    response_dict = ast.literal_eval(response_decoded)  # string to dict
+    global message
+    global code
+    message = response_dict['status']  # parse dict into proper messages
+    code = response_dict['code']
+    # print(message)
+    # print(code)
+    return message, code
+
+
+scheduler = BackgroundScheduler(job_defaults={'misfire_grace_time': 15*60})
+job = scheduler.add_job(monitor_stats, 'interval', minutes=1)
+scheduler.start()
+
+
 # login = LoginManager(app)
 # login.login_view = 'login'
 # Zappa build
@@ -35,6 +96,10 @@ def index():
     except:
         session['logged_in'] = False
         return redirect(url_for('login'))
+    try:
+        flash(message)
+    except:
+        flash("No available Data")
     return render_template('index.html')
 
 
