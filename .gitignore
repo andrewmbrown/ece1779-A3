@@ -9,6 +9,8 @@ app/__pycache__/routes.cpython-38.pyc
 __pycache__/*.pyc
 __pycache__
 app/__pycache__/
+env1779/
+./zappa_settings.json
 
 # Taken from microblog tutorial
 *.py[cod]
@@ -64,3 +66,4 @@ app/__pycache__/forms.cpython-38.pyc
 app/access.py
 access.py
 .vscode
+zappa_settings.json
