@@ -2,23 +2,27 @@ import os
 import time
 import shutil
 import requests
+
 import psutil
 import time
 import json
 import boto3
-import ast
+import ast 
 import math
+import base64
+
 from flask import Flask, flash, redirect, url_for, render_template, session
 from config import Config
 from app.forms import LoginForm, RegistrationForm, PictureForm, URLPictureForm
 from app.imagetransform import image_transform
 from app.apputilities import extension_dict, check_img_url
 from werkzeug.utils import secure_filename
-from app.aws import AwsSession
+
+from app.aws import AwsSession 
 from datetime import datetime
 from access import access_keys
-from apscheduler.schedulers.background import BackgroundScheduler  # for posting http req data
-
+from apscheduler.schedulers.background import BackgroundScheduler
+from PIL import Image 
 
 app = Flask(__name__)  # create app of instance Flask
 app.config['SECRET_KEY'] = 'c7e22c3ba14bd20390e19e9954796d8b'
@@ -82,7 +86,10 @@ scheduler.start()
 # login.login_view = 'login'
 # Zappa build
 
-# comment test for merge
+MAX_HEIGHT = 800
+MAX_WIDTH = 800
+
+# comment test for merge of branch
 
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/index', methods=['GET', 'POST'])
@@ -195,19 +202,13 @@ def upload():
             path_dict = {
                 'rootdir': picture_path,
                 'normal': os.path.join(picture_path, 'normal'),
-                'thumbnail': os.path.join(picture_path, 'thumbnail'),
-                'blur': os.path.join(picture_path, 'blur'),
-                'shade': os.path.join(picture_path, 'shade'),
-                'spread': os.path.join(picture_path, 'spread')
+                'thumbnail': os.path.join(picture_path, 'thumbnail')
             }
 
             s3_dict = {
             'rootdir': s3_path,
             'normal': "/".join([s3_path, 'normal']),
-            'thumbnail': "/".join([s3_path, 'thumbnail']),
-            'blur': "/".join([s3_path, 'blur']),
-            'shade': "/".join([s3_path, 'shade']),
-            'spread': "/".join([s3_path, 'spread'])
+            'thumbnail': "/".join([s3_path, 'thumbnail'])
             }
 
             pic_path = {
@@ -216,43 +217,78 @@ def upload():
                 "filename": filename,
                 "location": picture_path,
                 "httppath": http_path,
-                "s3path": s3_path
+                "s3path": s3_path,
+                "text_english": "none",
+                "text_french": "none",
+                "text_spanish": "none"
             }
 
             # save the image file itself on the local machine
             # os.mkdir(picture_path) # already exists
             os.mkdir(path_dict['normal'])
             os.mkdir(path_dict['thumbnail'])
-            os.mkdir(path_dict['blur'])
-            os.mkdir(path_dict['shade'])
-            os.mkdir(path_dict['spread'])
 
             main_path = os.path.join(path_dict['normal'], filename)
             thumbnail_path = os.path.join(path_dict['thumbnail'], filename)
-            blur_path = os.path.join(path_dict['blur'], filename)
-            shade_path = os.path.join(path_dict['shade'], filename)
-            spread_path = os.path.join(path_dict['spread'], filename)
 
             main_path_s3 = "/".join([s3_dict['normal'], filename])
             thumbnail_path_s3 = "/".join([s3_dict['thumbnail'], filename])
-            blur_path_s3 = "/".join([s3_dict['blur'], filename])
-            shade_path_s3 = "/".join([s3_dict['shade'], filename])
-            spread_path_s3 = "/".join([s3_dict['spread'], filename])
-            main_path = os.path.join(path_dict['normal'], filename)
-            main_path_s3 = "/".join([s3_dict['normal'], filename])
 
             form.picture.data.save(main_path)
-            blur_test = image_transform(main_path, blur_path, 0) # add errors if didn't work
-            shade_test = image_transform(main_path, shade_path, 1)
-            spread_test = image_transform(main_path, spread_path, 2)
+            im = Image.open(main_path)
+            width, height = im.size
+            ratio = min(MAX_WIDTH/width, MAX_HEIGHT/height)
+            if (ratio < 1):
+                new_width = int(width*ratio)
+                new_height = int(height*ratio)
+                im = im.resize((new_width, new_height), Image.ANTIALIAS)
+                im.save(main_path)
             thumbnail_test = image_transform(main_path, thumbnail_path, 3)
 
-            s3_client.upload_file(main_path, bucket, main_path_s3)
-            s3_client.upload_file(blur_path, bucket, blur_path_s3)
-            s3_client.upload_file(shade_path, bucket, shade_path_s3)
-            s3_client.upload_file(spread_path, bucket, spread_path_s3)
             s3_client.upload_file(thumbnail_path, bucket, thumbnail_path_s3)
             s3_client.upload_file(main_path, bucket, main_path_s3)
+
+            path_file, filename_ext = os.path.splitext(main_path)
+            filext = (filename_ext.replace('.', '').upper())
+
+            b64string = ""
+
+            with open(main_path, "rb") as image:
+                b64string = base64.b64encode(image.read())
+
+            test_payload = {
+                "image_b64": b64string.decode('utf-8'),
+                "AWS_ACC_KEY": aws.AWS_ACC_KEY,
+                "AWS_SEC_KEY": aws.AWS_SEC_KEY,
+                "true_extension": filename_ext,
+                "type_extension": filext
+            }
+
+            json_payload = json.dumps(test_payload)
+
+            resp = aws.lamb.invoke(
+                FunctionName="extract-and-translate",
+                InvocationType="RequestResponse",
+                Payload=json_payload
+            )
+
+            trans = resp["Payload"].read().decode('utf-8')
+            str_trans = json.loads(trans)
+            trans_list = ast.literal_eval(str_trans['body'])
+
+            en_trans = trans_list['english']
+            fr_trans = trans_list['french']
+            es_trans = trans_list['spanish']
+
+            if len(en_trans) > 0:
+                en_trans = list(dict.fromkeys(en_trans))
+                pic_path['text_english'] = "|".join(en_trans)
+            if len(fr_trans) > 0:
+                fr_trans = list(dict.fromkeys(fr_trans))
+                pic_path['text_french'] = "|".join(fr_trans)
+            if len(es_trans) > 0:
+                es_trans = list(dict.fromkeys(es_trans))
+                pic_path['text_spanish'] = "|".join(es_trans)      
 
             # remove files in lambda function tmp folder
             for file_object in os.listdir(picture_path):
@@ -263,6 +299,7 @@ def upload():
                     shutil.rmtree(file_object_path)
 
             aws.DDB_upload_image(pic_path)
+
     return render_template('upload.html', title='Upload Image', form=form)
 
 
@@ -435,14 +472,32 @@ def image(imagefolder, imgname):
         return redirect(url_for('index'))
     username = str(session['current_user'])
     filename = str(imgname).replace("$", ".")
+    # USE imagefolder as the sort key to get the AWS get image to get trans
+    out_data = aws.DDB_get_image_by_filename(username, imagefolder)
+    img_data = out_data[0]
+
+    en_list = ["none"]
+    fr_list = ["none"]
+    es_list = ["none"]
+
+    if img_data["text_english"] != "none":
+        en_list = img_data["text_english"].split("|")
+
+    if img_data["text_french"] != "none":
+        fr_list = img_data["text_french"].split("|")
+
+    if img_data["text_spanish"] != "none":
+        es_list = img_data["text_spanish"].split("|")
+
+
     path_components = {
         'username': username,
         'dirname': imagefolder,
         'filename': filename,
         'normal': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/normal/"+filename,
-        'blur': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/blur/"+filename,
-        'shade': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/shade/"+filename,
-        'spread': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/spread/"+filename
+        'trans_en': en_list,
+        'trans_fr': fr_list,
+        'trans_es': es_list
     }
     # print(path_components)
     return render_template('image.html', title=imagefolder, pathcomp=path_components)

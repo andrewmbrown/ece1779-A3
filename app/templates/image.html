@@ -3,7 +3,22 @@
     <h1>{{ title }}</h1>
     <p>Click on Gallery at the top to return to your gallery.</p>
     <div><img src="{{ pathcomp.normal }}"></div>
-    <div><img src="{{ pathcomp.blur }}"></div>
-    <div><img src="{{ pathcomp.shade }}"></div>
-    <div><img src="{{ pathcomp.spread }}"></div>
+    <p>Extracted English Translations</p>
+    <ul>
+    {% for en_sentence in pathcomp.trans_en %}
+        <li>{{ en_sentence }}</li>
+    {% endfor %}
+    </ul>
+    <p>Extracted French Translations</p>
+    <ul>
+    {% for fr_sentence in pathcomp.trans_fr %}
+        <li>{{ fr_sentence }}</li>
+    {% endfor %}
+    </ul>
+    <p>Extracted Spanish Translations</p>
+    <ul>
+    {% for es_sentence in pathcomp.trans_es %}
+        <li>{{ es_sentence }}</li>
+    {% endfor %}
+    </ul>
 {% endblock content %}
