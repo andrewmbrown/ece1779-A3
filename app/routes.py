@@ -2,6 +2,8 @@ import os
 import time
 import shutil
 import requests
+import ast 
+import json 
 from flask import Flask, flash, redirect, url_for, render_template, session
 from config import Config
 from app.forms import LoginForm, RegistrationForm, PictureForm, URLPictureForm
@@ -146,9 +148,9 @@ def upload():
                 "location": picture_path,
                 "httppath": http_path,
                 "s3path": s3_path,
-                "text_english": "",
-                "text_french": "",
-                "text_spanish": ""
+                "text_english": "none",
+                "text_french": "none",
+                "text_spanish": "none"
             }
 
             # save the image file itself on the local machine
@@ -168,7 +170,42 @@ def upload():
             s3_client.upload_file(thumbnail_path, bucket, thumbnail_path_s3)
             s3_client.upload_file(main_path, bucket, main_path_s3)
 
-            # TODO: DO THE LAMBDA CALL FOR IMAGE TEXT DETECTION AND TRANSLATION HERE
+            path_file, filename_ext = os.path.splitext(main_path)
+            filext = (filename_ext.replace('.', '').upper())
+
+            b64string = ""
+
+            with open(main_path, "rb") as image:
+                b64string = base64.b64encode(image.read())
+
+            test_payload = {
+                "image_b64": b64string.decode('utf-8'),
+                "AWS_ACC_KEY": aws.AWS_ACC_KEY,
+                "AWS_SEC_KEY": aws.AWS_SEC_KEY,
+                "true_extension": filename_ext,
+                "type_extension": filext
+            }
+
+            resp = aws.lamb.invoke(
+                FunctionName="extract-and-translate",
+                InvocationType="RequestResponse",
+                Payload=json_payload
+            )
+
+            trans = resp["Payload"].read().decode('utf-8')
+            str_trans = json.loads(trans)
+            trans_list = ast.literal_eval(str_trans['body'])
+
+            en_trans = trans_list['english']
+            fr_trans = trans_list['french']
+            es_trans = trans_list['spanish']
+
+            if len(en_trans) > 0:
+                pic_path['text_english'] = "|".join(en_trans)
+            if len(fr_trans) > 0:
+                pic_path['text_french'] = "|".join(fr_trans)
+            if len(es_trans) > 0:
+                pic_path['text_spanish'] = "|".join(es_trans)      
 
             # remove files in lambda function tmp folder
             for file_object in os.listdir(picture_path):
@@ -352,14 +389,32 @@ def image(imagefolder, imgname):
         return redirect(url_for('index'))
     username = str(session['current_user'])
     filename = str(imgname).replace("$", ".")
+    # USE imagefolder as the sort key to get the AWS get image to get trans
+    out_data = aws.DDB_get_image_by_filename(username, imagefolder)
+    img_data = out_data[0]
+
+    en_list = ["none"]
+    fr_list = ["none"]
+    es_list = ["none"]
+
+    if img_data["text_english"] != "none":
+        en_list = img_data["text_english"].split("|")
+
+    if img_data["text_french"] != "none":
+        fr_list = img_data["text_french"].split("|")
+
+    if img_data["text_spanish"] != "none":
+        es_list = img_data["text_spanish"].split("|")
+
+
     path_components = {
         'username': username,
         'dirname': imagefolder,
         'filename': filename,
         'normal': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/normal/"+filename,
-        'blur': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/blur/"+filename,
-        'shade': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/shade/"+filename,
-        'spread': bucket_url_base+'static/images/'+username+"/"+imagefolder+"/spread/"+filename
+        'trans_en': en_list,
+        'trans_fr': fr_list,
+        'trans_es': es_list
     }
     # print(path_components)
     return render_template('image.html', title=imagefolder, pathcomp=path_components)

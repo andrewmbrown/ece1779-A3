@@ -25,6 +25,12 @@ class AwsSession:
             aws_secret_access_key=self.AWS_SEC_KEY, 
             region_name="us-east-1")
         self.ddb = session.resource('dynamodb')
+        self.lamb = boto3.client(
+            "lambda",
+            aws_access_key_id=access_keys["AWS_ACC_KEY"],
+            aws_secret_access_key=access_keys["AWS_SECRET_KEY"],
+            region_name="us-east-1"
+        )
         
         self.user_table = self.ddb.Table(self.user_table_name)
         self.image_table = self.ddb.Table(self.image_table_name)
@@ -95,5 +101,11 @@ class AwsSession:
     def DDB_get_images_by_user(self, username):
         response = self.image_table.query(
             KeyConditionExpression=Key("username").eq(username)
+        )
+        return response["Items"]
+
+    def DDB_get_image_by_filename(self, username, filename):
+        response = self.image_table.query(
+            KeyConditionExpression=Key("username").eq(username) & Key("filename_currtime").eq(filename)
         )
         return response["Items"]
