@@ -12,6 +12,7 @@ from app.imagetransform import image_transform
 from app.apputilities import extension_dict, check_img_url
 from werkzeug.utils import secure_filename
 from app.aws import AwsSession 
+from PIL import Image 
 
 app = Flask(__name__)  # create app of instance Flask
 app.config['SECRET_KEY'] = 'c7e22c3ba14bd20390e19e9954796d8b'
@@ -23,6 +24,9 @@ s3_client = aws.s3
 # login = LoginManager(app)
 # login.login_view = 'login'
 # Zappa build
+
+MAX_HEIGHT = 800
+MAX_WIDTH = 800
 
 # comment test for merge of branch
 
@@ -166,6 +170,14 @@ def upload():
             thumbnail_path_s3 = "/".join([s3_dict['thumbnail'], filename])
 
             form.picture.data.save(main_path)
+            im = Image.open(main_path)
+            width, height = im.size
+            ratio = min(MAX_WIDTH/width, MAX_HEIGHT/height)
+            if (ratio < 1):
+                new_width = int(width*ratio)
+                new_height = int(height*ratio)
+                im = im.resize((new_width, new_height), Image.ANTIALIAS)
+                im.save(main_path)
             thumbnail_test = image_transform(main_path, thumbnail_path, 3)
 
             s3_client.upload_file(thumbnail_path, bucket, thumbnail_path_s3)
