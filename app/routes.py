@@ -4,6 +4,7 @@ import shutil
 import requests
 import ast 
 import json 
+import base64
 from flask import Flask, flash, redirect, url_for, render_template, session
 from config import Config
 from app.forms import LoginForm, RegistrationForm, PictureForm, URLPictureForm
@@ -186,6 +187,8 @@ def upload():
                 "type_extension": filext
             }
 
+            json_payload = json.dumps(test_payload)
+
             resp = aws.lamb.invoke(
                 FunctionName="extract-and-translate",
                 InvocationType="RequestResponse",
@@ -201,10 +204,13 @@ def upload():
             es_trans = trans_list['spanish']
 
             if len(en_trans) > 0:
+                en_trans = list(dict.fromkeys(en_trans))
                 pic_path['text_english'] = "|".join(en_trans)
             if len(fr_trans) > 0:
+                fr_trans = list(dict.fromkeys(fr_trans))
                 pic_path['text_french'] = "|".join(fr_trans)
             if len(es_trans) > 0:
+                es_trans = list(dict.fromkeys(es_trans))
                 pic_path['text_spanish'] = "|".join(es_trans)      
 
             # remove files in lambda function tmp folder
