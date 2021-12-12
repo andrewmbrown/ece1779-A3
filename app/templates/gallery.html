@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
     <h1>Gallery</h1>
-    <p>Click on a thumbnail image to see the full images.</p>
+    <h3>Click on a thumbnail image to see the full images.</h3>
     {% for img in image_paths %}
     <div><a href="{{ url_for('image', imagefolder=img.dirname , imgname=img.filename_url) }}"><img src="{{ img.thumbnail }}" width=50 height=50></a></div>
     {% endfor %}

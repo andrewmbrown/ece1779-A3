@@ -1,6 +1,7 @@
 <!doctype html>
 <html>
     <head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
       {% if title %}
       <title>{{ title }} - Translate</title>
       {% else %}
@@ -8,8 +9,7 @@
       {% endif %}
     </head>
     <body>
-        <div>
-            Translator App: 
+        <div id='myNavbar' class='navbar'>
             <a href="/dev/index">Home</a>
             <a href="/dev/login">Login</a>
             <a href="/dev/logout">Logout</a>
@@ -19,6 +19,7 @@
             <a href="/dev/api">epicAPI</a>
         </div>
 
+        
         <hr>
         {% block content %}{% endblock %}
         <hr>
@@ -26,7 +27,7 @@
         {% if messages %}
         <ul>
             {% for message in messages %}
-            <li>{{ message }}</li>
+            <li><div style="font-size:1.5rem">&#128587{{ message }}&#128583</div></li>
             {% endfor %}
         </ul>
         {% endif %}
